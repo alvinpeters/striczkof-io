@@ -18,3 +18,8 @@ target/
 
 # IDEA Files
 .idea/
+
+# TLS Certificates and Keys
+*.crt
+*.key
+*.pem
