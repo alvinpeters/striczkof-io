@@ -1,6 +1,6 @@
-mod webpages;
 mod config;
 
+use std::env;
 use config::Config;
 
 use actix_web::{App, HttpServer};
@@ -20,11 +20,20 @@ pub async fn index() -> impl Responder {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let config = Config::new().unwrap();
+    let config = match Config::new().parse_args(env::args().collect()) {
+        Some(c) => match c.finalise() {
+            Ok(c) => c,
+            Err(e) => {
+                println!("Failed to finalise config: {}", e);
+                return Ok(());
+            }
+        },
+        None => return Ok(()) // Just called help or version
+    };
     let mut web_server = HttpServer::new(|| {
         App::new()
             .service(index)
-    });
+    }).server_hostname(env!("_HOSTNAME"));
     match config.ipv6_http_socket {
         Some(ipv6) => {
             match config.ipv4_http_socket {
@@ -32,9 +41,7 @@ async fn main() -> std::io::Result<()> {
                     println!("Binding to IPv4 HTTP socket {}", ipv4);
                     web_server = web_server.bind(ipv4)?;
                 },
-                None => {
-                    println!("No IPv4 HTTP socket set");
-                }
+                None => {}
             };
             println!("Binding to IPv6 HTTP socket {}", ipv6);
             web_server = web_server.bind(ipv6)?;
@@ -89,6 +96,9 @@ async fn main() -> std::io::Result<()> {
         println!("I don't think you can call this a web server if it doesn't bind to any sockets.");
         Ok(())
     } else {
-        web_server.run().await
+        println!("Server going live!");
+        let result = web_server.run().await;
+        println!("Server stopped");
+        result
     }
 }
