@@ -1,0 +1,19 @@
+#!/bin/sh
+
+# PROVIDE: striczkof_io
+# REQUIRE: LOGIN
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+
+name="striczkof_io"
+rcvar=striczkof_io_enable
+
+striczkof_io_command="/usr/local/bin/${name}"
+
+pidfile="/var/run/${name}.pid"
+command="/usr/sbin/daemon"
+command_args="-P ${pidfile} -r -f ${striczkof_io_command}"
+
+load_rc_config $name
+run_rc_command "$1"

@@ -1,0 +1,9 @@
+[Unit]
+Description=Run the striczkof.io server
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/striczkof_io
+
+[Install]
+WantedBy=multi-user.target
