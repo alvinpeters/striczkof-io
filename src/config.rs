@@ -6,31 +6,19 @@ use rustls::{Certificate, PrivateKey, ServerConfig};
 use rustls_pemfile::{certs, pkcs8_private_keys};
 
 pub(crate) struct Config {
-    /// If none of the four sockets are set, don't bind to anything I guess
-
-    /// IPv4 address and port to bind HTTPS to
-    pub(crate) ipv4_http_socket: Option<String>,
-    /// IPv6 address and port to bind HTTP to
-    pub(crate) ipv6_http_socket: Option<String>,
-    /// If either sockets is set, TLS will be enabled
-
+    pub(crate) http_sockets: Vec<String>,
+    pub(crate) https_sockets: Vec<String>,
     /// TLS Configuration (key and certificate)
     pub(crate) tls_config: Option<ServerConfig>,
-    /// IPv4 address and port to bind HTTPS to
-    pub(crate) ipv4_https_socket: Option<String>,
-    /// IPv6 address and port to bind HTTPS to
-    pub(crate) ipv6_https_socket: Option<String>,
 }
 
 impl Config {
     /// Creates an empty configuration
     pub(crate) fn new() -> Self {
         Config {
-            ipv4_http_socket: None,
-            ipv6_http_socket: None,
+            http_sockets: Vec::new(),
+            https_sockets: Vec::new(),
             tls_config: None,
-            ipv4_https_socket: None,
-            ipv6_https_socket: None,
         }
     }
 
@@ -40,24 +28,20 @@ impl Config {
         let cmd = args[0].clone();
 
         let mut opts = Options::new();
-        /// IPv4 HTTP socket (IPv4:port)
-        opts.optopt("", "ipv4-http-socket",
-                    "IPv4 address and port for an HTTP connection", "ADDR:PORT");
-        opts.optopt("", "ipv6-http-socket",
-                    "IPv6 address and port for an HTTP connection", "ADDR:PORT");
-        opts.optopt("", "ipv4-https-socket",
-                    "IPv4 address and port for an HTTPS connection", "ADDR:PORT");
-        opts.optopt("", "ipv6-https-socket",
-                    "IPv6 address and port for an HTTPS connection", "ADDR:PORT");
+        // IPv4 HTTP socket (IPv4:port)
+        opts.optmulti("", "http-socket",
+                    "Address and port for a simple HTTP connection", "ADDR:PORT");
+        opts.optmulti("", "https-socket",
+                      "Address and port for an HTTP through SSL connection", "ADDR:PORT");
         opts.optopt("", "tls-key",
                     "TLS key DER file (must be specified together with --tls-cert)", "FILE");
         opts.optopt("", "tls-cert",
                     "TLS certificate chain PEM file (must be specified together with --tls-key)", "FILE");
-        /// Verbosity, can take up to 2 v's
+        // Verbosity, can take up to 2 v's
         opts.optflagmulti("v", "verbose", "increase verbosity");
-        /// Version
+        // Version
         opts.optflag("V", "version", "print version info and exit");
-        /// Help menu
+        // Help menu
         opts.optflag("h", "help", "print this help menu");
         let matches = match opts.parse(&args[1..]) {
             Ok(m) => { m }
@@ -65,6 +49,10 @@ impl Config {
         };
         if matches.opt_present("h") {
             println!("{}", opts.usage(&format!("Usage: {} [options]", cmd)));
+            #[cfg(feature = "compiled_tls")] {
+                println!("Compiled with TLS key '{}' and TLS certificate chain '{}'", env!("TLS_CERT"), env!("TLS_KEY"));
+                println!("It will be loaded if you use an HTTPS socket.");
+            }
             return None;
         }
         if matches.opt_present("V") {
@@ -72,27 +60,26 @@ impl Config {
             return None;
         }
         // Set config
-        if matches.opt_present("ipv4-http-socket") {
-            self.ipv4_http_socket = matches.opt_str("ipv4-http-socket");
+        if matches.opt_present("http-socket") {
+            self.http_sockets = matches.opt_strs("http-socket");
         }
-        if matches.opt_present("ipv6-http-socket") {
-            self.ipv6_http_socket = matches.opt_str("ipv6-http-socket");
-        }
-        if matches.opt_present("ipv4-https-socket") {
-            self.ipv4_https_socket = matches.opt_str("ipv4-https-socket");
-        }
-        if matches.opt_present("ipv6-https-socket") {
-            self.ipv6_https_socket = matches.opt_str("ipv6-https-socket");
+        if matches.opt_present("https-socket") {
+            self.https_sockets = matches.opt_strs("https-socket");
         }
         self.tls_config = if matches.opt_present("tls-key") && matches.opt_present("tls-cert") {
-            match get_cert_chain_and_key(
-                matches.opt_str("tls-cert").unwrap().as_str(),
-                matches.opt_str("tls-key").unwrap().as_str()) {
-                Ok((cert_chain, key_der)) => get_tls_config(cert_chain, key_der),
-                Err(e) => {
-                    eprintln!("Failed to load TLS configuration: {}", e);
-                    None
+            if !self.https_sockets.is_empty() {
+                match get_cert_chain_and_key(
+                    matches.opt_str("tls-cert").unwrap().as_str(),
+                    matches.opt_str("tls-key").unwrap().as_str()) {
+                    Ok((cert_chain, key_der)) => get_tls_config(cert_chain, key_der),
+                    Err(e) => {
+                        eprintln!("Failed to load TLS configuration: {}", e);
+                        None
+                    }
                 }
+            } else {
+                eprintln!("There is no point in setting TLS key and certificate chain if there are no HTTPS sockets set.");
+                None
             }
         } else if matches.opt_present("tls-key") ^ matches.opt_present("tls-cert") {
             eprintln!("TLS key or certificate chain is set, but not both. Neither will be loaded.");
@@ -105,16 +92,15 @@ impl Config {
 
     /// Set TLS if needed, set default values.
     pub(crate) fn finalise(mut self) -> Result<Self, &'static str> {
-        self.ipv6_https_socket = Some(String::from("[::1]:8443"));
-        self.ipv6_http_socket = Some(String::from("[::1]:8080"));
-        self.ipv4_http_socket = Some(String::from("127.0.0.1:8080"));
+        self.https_sockets.push(String::from("[::1]:8443"));
+        self.http_sockets.push(String::from("localhost:8080"));
 
+        // Set TLS config if key and certs are compiled in
         self.tls_config = match self.tls_config {
             Some(c) => {Some(c)}
-            None => if cfg!(feature = "compiled_tls") {
-                let out: Option<ServerConfig> = None;
+            None => {
                 #[cfg(feature = "compiled_tls")]
-                let out = if self.ipv4_https_socket.is_some() || self.ipv6_https_socket.is_some() {
+                if !self.https_sockets.is_empty() {
                     println!("HTTPS bindings set, configuring TLS with compiled TLS files.");
                     let (cert_chain, key_der) = match get_compiled_cert_chain_and_key() {
                         Ok((cert_chain, key_der)) => (cert_chain, key_der),
@@ -124,17 +110,12 @@ impl Config {
                 } else {
                     println!("No HTTPS bindings set, not configuring TLS.");
                     None
-                };
-                out
-            } else {
+                }
+                #[cfg(not(feature = "compiled_tls"))]
                 None
-            },
+            }
         };
         return Ok(self);
-    }
-
-    pub(crate) fn both_https_sockets_set(&self) -> bool {
-        self.ipv4_https_socket.is_some() && self.ipv6_https_socket.is_some()
     }
 }
 

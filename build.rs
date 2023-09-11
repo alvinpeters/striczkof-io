@@ -1,5 +1,3 @@
-use std::env;
-
 fn main() {
     let tls_key = option_env!("TLS_KEY");
     let tls_cert = option_env!("TLS_CERT");
