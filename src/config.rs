@@ -92,9 +92,6 @@ impl Config {
 
     /// Set TLS if needed, set default values.
     pub(crate) fn finalise(mut self) -> Result<Self, &'static str> {
-        self.https_sockets.push(String::from("[::1]:8443"));
-        self.http_sockets.push(String::from("localhost:8080"));
-
         // Set TLS config if key and certs are compiled in
         self.tls_config = match self.tls_config {
             Some(c) => {Some(c)}
