@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package config.file;
+
+// A snazzy new shirt!
+message Config {
+  message TlsConfig {
+    string cert_file = 1;
+    string key_file = 2;
+  }
+
+  repeated string http_socket = 1;
+  repeated string https_socket = 2;
+  TlsConfig tls_config = 3;
+}

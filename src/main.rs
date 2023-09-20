@@ -41,6 +41,7 @@ async fn main() -> std::io::Result<()> {
             }
         }
     }
+
     if web_server.addrs().is_empty() {
         println!("I don't think you can call this a web server if it doesn't bind to any sockets.");
         Ok(())
