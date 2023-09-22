@@ -7,7 +7,7 @@ CARGO_CMD := cargo
 all: build
 
 build:
-	${CARGO_CMD} build --release ${TARGET_OPTION}
+	${CARGO_CMD} build --release
 
 clean:
 	${CARGO_CMD} clean
