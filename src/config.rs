@@ -37,6 +37,8 @@ impl Config {
                     "TLS key DER file (must be specified together with --tls-cert)", "FILE");
         opts.optopt("", "tls-cert",
                     "TLS certificate chain PEM file (must be specified together with --tls-key)", "FILE");
+        // Version
+        opts.optflag("L", "live", "use live Let's Encrypt directory");
         // Verbosity, can take up to 2 v's
         opts.optflagmulti("v", "verbose", "increase verbosity");
         // Version

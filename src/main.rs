@@ -19,7 +19,8 @@ async fn main() -> std::io::Result<()> {
         None => return Ok(()) // Just called help or version
     };
     let mut web_server = HttpServer::new(|| {
-        App::new().configure(webpages::config)
+        App::new()
+            .configure(webpages::config)
     }).server_hostname(env!("_HOSTNAME"));
     if !config.http_sockets.is_empty() {
         for http_socket in config.http_sockets.iter() {
@@ -31,6 +32,7 @@ async fn main() -> std::io::Result<()> {
         match config.tls_config {
             Some(c) => {
                 println!("TLS is enabled. Binding to HTTPS sockets");
+                let sockets_left = config.https_sockets.len();
                 for https_socket in config.https_sockets.iter() {
                     web_server = web_server.bind_rustls_021(https_socket, c.clone())?;
                     println!("Bound to HTTPS socket {}", https_socket);

@@ -7,5 +7,5 @@ struct Index {}
 
 #[get("/")]
 pub async fn index() -> impl Responder {
-    HttpResponse::Ok().body(Index {}.render_once().unwrap())
+    HttpResponse::Ok().content_type("text/html").body(Index {}.render_once().unwrap())
 }

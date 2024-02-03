@@ -1,4 +1,9 @@
-fn main() {
+use std::io::Result;
+
+fn main() -> Result<()> {
+    // Generate protobuf bindings.
+    prost_build::compile_protos(&["src/config_file.proto"], &["src/"])?;
+
     let tls_key = option_env!("TLS_KEY");
     let tls_cert = option_env!("TLS_CERT");
     if tls_key.is_some() && tls_cert.is_some() {
@@ -12,4 +17,5 @@ fn main() {
     println!("cargo:rustc-env=_HOSTNAME={}", hostname);
 
 
+    Ok(())
 }
