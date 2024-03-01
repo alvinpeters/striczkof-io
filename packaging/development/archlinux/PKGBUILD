@@ -1,0 +1,18 @@
+# Maintainer: Alvin Peters <alvin@striczkof.io>
+_prefix=/usr
+pkgname=striczkof-io-git
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="My pathetic attempt of making my own web server + website with mostly Rust stuff."
+url="https://striczkof.io"
+source=("git+https://github.com/striczkof/striczkof-io.git")
+makedepends=('rust')
+build() {
+  cd $pkgname
+  # Builds then moves the binary to the ${_prefix}/bin
+  PREFIX=$_prefix ./build.sh
+}
+
+package() {
+  cp -R ${pkgname}/staging/* ${pkgdir}/
+}

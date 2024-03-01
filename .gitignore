@@ -20,9 +20,6 @@ staging/
 # IDEA Files
 .idea/
 
-# Generated Makefile
-Makefile
-
 # TLS Certificates and Keys
 *.crt
 *.key
