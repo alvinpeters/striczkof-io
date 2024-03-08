@@ -63,7 +63,7 @@
                     <p>Feel free to leave death threats, ransom requests, hate mail, or just say hello!</p>
                     <ul class="list-inline banner-social-buttons">
                         <li class="list-inline-item">&nbsp;
-                            <a class="btn btn-primary btn-lg btn-default" role="button" data-bs-toggle="tooltip" data-bss-tooltip="" title="Fuck you Elon! I will deadname X until I die." href="https://twitter.com/striczkof" target="_blank"><i class="fa fa-twitter fa-fw"></i><span class="network-name">Twitter</span></a></li>
+                            <a class="btn btn-primary btn-lg btn-default" role="button" data-bs-toggle="tooltip" data-bss-tooltip="" title="Screw you Elon! I will deadname X until I die." href="https://twitter.com/striczkof" target="_blank"><i class="fa fa-twitter fa-fw"></i><span class="network-name">Twitter</span></a></li>
                         <li class="list-inline-item">&nbsp;
                             <a class="btn btn-primary btn-lg btn-default" role="button" data-bs-toggle="tooltip" data-bss-tooltip="" title="Don't even bother looking. It's empty as." href="https://www.linkedin.com/in/striczkof/" target="_blank"><i class="fa fa-linkedin-square fa-fw"></i><span class="network-name">LinkedIn</span></a></li>
                         <li class="list-inline-item">&nbsp;<button class="btn btn-primary btn-lg btn-default" data-bs-toggle="tooltip" data-bss-tooltip="" type="button" title="I'm too lazy to complete this. Just type my username for now: striczkof"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="currentColor" viewBox="0 0 16 16" class="bi bi-discord fa-fw">
