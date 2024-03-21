@@ -9,6 +9,18 @@ rust-version = "1.74.0"
 [dependencies]
 tokio = {version = "1.36", features = ["full"]}
 hyper = {version = "1.2", features = ["full"]}
+http-body-util = "0.1"
+rustls = "0.23"
+tokio-rustls = "0.25"
+rustls-pemfile = "2.1"
+log = "0.4"
+tokio-util = "0.7"
+hyper-util = {version = "0.1", features = ["full"]}
+
+[dev-dependencies]
+## Used for generating x509 certificate for testing.
+rcgen = "0.12"
 
 [features]
-compiled_tls = []
+default = ["tls"]
+tls = []

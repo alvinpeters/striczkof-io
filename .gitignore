@@ -21,5 +21,6 @@ target/
 
 # TLS Certificates and Keys
 *.crt
+*.cert
 *.key
 *.pem
