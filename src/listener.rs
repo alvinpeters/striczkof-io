@@ -42,7 +42,6 @@ impl RunningListener {
         Listener {
             socket: self.socket,
             tls_acceptor,
-            over_tls: false,
             tcp_listener,
         }
     }
@@ -52,8 +51,6 @@ pub(crate) struct Listener {
     pub(crate) socket: SocketAddr,
     /// Will be None whenever listening or just isn't TLS capable.
     tls_acceptor: Option<TlsAcceptor>,
-    /// True when this is an HTTPS listener
-    pub(crate) over_tls: bool,
     /// Only None whenever the listener is active
     tcp_listener: TcpListener,
 }
@@ -63,7 +60,6 @@ impl Listener {
         Ok(Listener {
             socket: socket_addr,
             tls_acceptor: None,
-            over_tls: false,
             tcp_listener: TcpListener::bind(&socket_addr).await?,
         })
     }
@@ -83,7 +79,7 @@ impl Listener {
                 match res {
                     Ok((s, a)) => (s, a),
                     Err(e) => {
-                        eprintln!("Bruh moment!: {}", e); // TODO: l10n: ERR_NOT_LISTENING
+                        eprintln!("Bruh moment!: {e}"); // l10n: ERR_NOT_LISTENING(e)
                         return None;
                     }
                 }
@@ -117,7 +113,7 @@ impl Listener {
     }
 
     fn serve_http(tcp_stream: TcpStream, socket_addr: SocketAddr) {
-        debug!("H TTP request received from {}!", socket_addr);
+        debug!("HTTP request received from {}!", socket_addr);
         tokio::task::spawn(async move {
             let io = TokioIo::new(tcp_stream);
             Self::serve(io).await;
@@ -176,7 +172,7 @@ impl Listener {
                 };
                 Self::serve_https(tcp_stream, socket_addr, a.clone())
             }
-            tls_acceptor = Some(a);
+            tls_acceptor = Option::from(a);
         } else {
             loop {
                 let (tcp_stream, socket_addr) = match Self::listen_or_cancel(&tcp_listener, &cancellation_token).await {
@@ -193,7 +189,6 @@ impl Listener {
 
     pub(crate) async fn with_tls_acceptor(mut self, tls_acceptor: TlsAcceptor) -> Listener {
         self.tls_acceptor = Option::from(tls_acceptor);
-        self.over_tls = true;
         self
     }
 
@@ -237,7 +232,8 @@ impl ListenerGroup {
             let listener = match Listener::bind(socket_addr).await {
                 Ok(l) => l,
                 Err(e) => {
-                    eprintln!("Bruh moment!: {}", e); // TODO: l10n: ERR_NOT_LISTENING
+                    // l10n: ERR_BIND_FAIL(socket_addr, e)
+                    eprintln!("Failed to bind to {socket_addr}. Full error: {e}");
                     continue;
                 }
             };
@@ -271,7 +267,14 @@ impl ListenerGroup {
     }
 
     pub(crate) async fn run(mut self, cancellation_token: CancellationToken) -> ListenerGroup {
-
+        let mut join_set = JoinSet::new();
+        while let Some(l) = self.listeners.pop() {
+            join_set.spawn(l.run(cancellation_token.child_token()));
+        }
+        while let Some(l) = join_set.join_next().await {
+            let listener = l.unwrap(); // TODO: Get rid of this unwrap
+            self.listeners.push(listener);
+        }
         self
     }
 }

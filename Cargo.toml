@@ -3,6 +3,8 @@ name = "striczkof-io"
 version = "0.2.0"
 edition = "2021"
 rust-version = "1.74.0"
+repository = "https://github.com/striczkof/striczkof-io"
+license = "AGPL-3"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -11,11 +13,14 @@ tokio = {version = "1.36", features = ["full"]}
 hyper = {version = "1.2", features = ["full"]}
 http-body-util = "0.1"
 rustls = "0.23"
-tokio-rustls = "0.25"
+tokio-rustls = "0.26"
 rustls-pemfile = "2.1"
 log = "0.4"
 tokio-util = "0.7"
 hyper-util = {version = "0.1", features = ["full"]}
+## Database stuff
+
+
 
 [dev-dependencies]
 ## Used for generating x509 certificate for testing.
@@ -24,3 +29,5 @@ rcgen = "0.12"
 [features]
 default = ["tls"]
 tls = []
+# Database stuff
+database = []
