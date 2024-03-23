@@ -54,6 +54,7 @@ mod tests {
     use std::fs;
     use std::path::Path;
     use rcgen::generate_simple_self_signed;
+    use crate::tls::{create_acceptor, load_pem_reader, private_key_from_file, public_certificates_from_file};
 
     ///
     const PRIV_KEY_FILE: &str = "testing.priv.key";
@@ -79,6 +80,9 @@ mod tests {
 
     #[test]
     fn create_acceptor_from_files() {
-        generate_cert()
+        generate_cert();
+        let priv_key = private_key_from_file(PRIV_KEY_FILE);
+        let pub_cert = public_certificates_from_file(PUB_CERT_FILE);
+        create_acceptor(priv_key, pub_cert).expect("Failed to create a TLS acceptor!");
     }
 }

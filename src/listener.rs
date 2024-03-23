@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+use std::vec::IntoIter;
 use http_body_util::Full;
 use hyper::body::Bytes;
 use hyper::{Request, Response};
@@ -11,6 +12,7 @@ use log::debug;
 use tokio::io::{Result, Error, ErrorKind};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::select;
+use tokio::task::{JoinHandle, JoinSet};
 use tokio_rustls::{TlsAcceptor, TlsStream};
 use tokio_util::sync::CancellationToken;
 
@@ -23,6 +25,29 @@ async fn index(request: Request<hyper::body::Incoming>) -> std::result::Result<R
     Ok(Response::new(Full::new(Bytes::from(INDEX))))
 }
 
+pub(crate) struct RunningListener {
+    pub(crate) socket: SocketAddr,
+    /// True when this is an HTTPS listener.
+    pub(crate) over_tls: bool,
+    /// Cancellation token for stopping the running listener.
+    cancellation_token: CancellationToken,
+    join_handle: JoinHandle<(TcpListener, Option<TlsAcceptor>)>
+}
+
+impl RunningListener {
+    pub(crate) async fn stop(mut self) -> Listener {
+        self.cancellation_token.cancel();
+        let (tcp_listener, tls_acceptor) = self.join_handle.await.unwrap();
+        // Return a stopped listener.
+        Listener {
+            socket: self.socket,
+            tls_acceptor,
+            over_tls: false,
+            tcp_listener,
+        }
+    }
+}
+
 pub(crate) struct Listener {
     pub(crate) socket: SocketAddr,
     /// Will be None whenever listening or just isn't TLS capable.
@@ -30,25 +55,16 @@ pub(crate) struct Listener {
     /// True when this is an HTTPS listener
     pub(crate) over_tls: bool,
     /// Only None whenever the listener is active
-    tcp_listener: Option<TcpListener>,
-    /// Only None whenever the listener is active or token is not provided
-    /// A cancellation token will be made if not present once listener starts
-    cancellation_token: Option<CancellationToken>,
-    /// True when the listener can cancel on its own
-    self_cancellable: bool
-
+    tcp_listener: TcpListener,
 }
 
 impl Listener {
     pub(crate) async fn bind(socket_addr: SocketAddr) -> Result<Listener> {
-        let tcp_listener = Option::from(TcpListener::bind(&socket_addr).await?);
         Ok(Listener {
             socket: socket_addr,
             tls_acceptor: None,
             over_tls: false,
-            tcp_listener,
-            cancellation_token: None,
-            self_cancellable: true,
+            tcp_listener: TcpListener::bind(&socket_addr).await?,
         })
     }
 
@@ -101,35 +117,66 @@ impl Listener {
     }
 
     fn serve_http(tcp_stream: TcpStream, socket_addr: SocketAddr) {
-        let io = TokioIo::new(tcp_stream);
         debug!("H TTP request received from {}!", socket_addr);
         tokio::task::spawn(async move {
+            let io = TokioIo::new(tcp_stream);
             Self::serve(io).await;
         });
     }
 
-    pub(crate) async fn listen(mut self) -> Listener {
-        let cancellation_token = match self.cancellation_token.take() {
-            Some(t) => t,
-            None => {
-                let t = CancellationToken::new();
-                self.cancellation_token = Option::from(t.clone());
-                t
-            }
+    /// Must have a cancellation token provided.
+    pub(crate) async fn run(mut self, cancellation_token: CancellationToken) -> Listener {
+        let (tcp_listener, tls_acceptor)
+            = Self::listen(self.tcp_listener, self.tls_acceptor, cancellation_token).await;
+        self.tcp_listener = tcp_listener;
+        self.tls_acceptor = tls_acceptor;
+        self
+    }
+
+    /// Requires a cancellation token, will otherwise make one if not provided
+    pub(crate) fn start(
+        mut self,
+        cancellation_token: Option<CancellationToken>,
+    ) -> RunningListener {
+        let over_tls = self.tls_acceptor.is_some();
+        let cancellation_token = if let Some(t) = cancellation_token {
+            t
+        } else {
+            CancellationToken::new()
         };
-        let tcp_listener = self.tcp_listener.take().unwrap();
-        if self.over_tls {
-            let tls_acceptor = self.tls_acceptor.unwrap();
+        let token = cancellation_token.child_token();
+        let join_handle = tokio::task::spawn(async move {
+            Self::listen(self.tcp_listener, self.tls_acceptor, token).await
+        });
+
+        // Return an active listener.
+        RunningListener {
+            socket: self.socket,
+            over_tls,
+            cancellation_token,
+            join_handle,
+        }
+    }
+
+    /// Listen
+    async fn listen(
+        tcp_listener: TcpListener,
+        mut tls_acceptor: Option<TlsAcceptor>,
+        cancellation_token: CancellationToken,
+    ) -> (TcpListener, Option<TlsAcceptor>) {
+        if let Some(a) = tls_acceptor {
             loop {
-                let (tcp_stream, socket_addr) = match Self::listen_or_cancel(&tcp_listener, &cancellation_token).await {
+                let (tcp_stream, socket_addr) = match Self::listen_or_cancel(
+                    &tcp_listener, &cancellation_token
+                ).await {
                     // Listener accepted
                     Some((s, a)) => (s, a),
                     // Listener cancelled
                     None => break
                 };
-                Self::serve_https(tcp_stream, socket_addr, tls_acceptor.clone())
+                Self::serve_https(tcp_stream, socket_addr, a.clone())
             }
-            self.tls_acceptor = Option::from(tls_acceptor);
+            tls_acceptor = Some(a);
         } else {
             loop {
                 let (tcp_stream, socket_addr) = match Self::listen_or_cancel(&tcp_listener, &cancellation_token).await {
@@ -141,9 +188,7 @@ impl Listener {
                 Self::serve_http(tcp_stream, socket_addr);
             }
         }
-        self.self_cancellable = true;
-        self.tcp_listener = Option::from(tcp_listener);
-        self
+        (tcp_listener, tls_acceptor)
     }
 
     pub(crate) async fn with_tls_acceptor(mut self, tls_acceptor: TlsAcceptor) -> Listener {
@@ -152,79 +197,129 @@ impl Listener {
         self
     }
 
-    /// Use your own cancellation token children here.
-    pub(crate) fn with_cancellation_token(mut self, cancellation_token: CancellationToken) -> Result<Listener> {
-        if self.running() {
-            return Err(Error::new(ErrorKind::AddrInUse, "TODO: get_text!(ERR_LISTENER_ALREADY_LISTENING, socket)"))
-        }
-        self.cancellation_token = Option::from(cancellation_token);
-        self.self_cancellable = false;
-        Ok(self)
-    }
-
     fn bound_socket(&self) -> &SocketAddr {
         &self.socket
     }
+}
 
-    fn running(&self) -> bool {
-        self.tcp_listener.is_none()
-    }
+pub(crate) struct RunningListenerGroup {
+    pub(crate) over_tls: bool,
+    /// Cancellation token for stopping the running listener.
+    cancellation_token: CancellationToken,
+    join_set: JoinSet<Listener>,
+}
 
-    async fn pause(&mut self) -> Result<()> {
-        if self.self_cancellable {
-            match self.cancellation_token.take() {
-                Some(t) => {
-                    t.cancel();
-                    Ok(())
-                },
-                None => Err(Error::new(ErrorKind::NotConnected, "TODO: get_text!(ERR_NOT_LISTENING, socket)"))
-            }
-        } else {
-            Err(Error::new(ErrorKind::Unsupported, "TODO: get_text!(ERR_NOT_SELF_CANCELLABLE, socket)"))
+impl RunningListenerGroup {
+    async fn stop(mut self) -> ListenerGroup {
+        let mut listeners = Vec::new();
+        self.cancellation_token.cancel();
+        while let Some(l) = self.join_set.join_next().await {
+            let listener = l.unwrap(); // TODO: Get rid of this unwrap
+            listeners.push(listener);
         }
-    }
-
-    async fn halt(&mut self) -> Result<()> {
-        self.pause().await?;
-        Ok(())
+        ListenerGroup {
+            listeners,
+            over_tls: self.over_tls,
+        }
     }
 }
 
 pub(crate) struct ListenerGroup {
-    listeners: Vec<Listener>
+    listeners: Vec<Listener>,
+    /// True when this is an HTTPS listener
+    pub(crate) over_tls: bool,
 }
 
 impl ListenerGroup {
-    fn new() -> ListenerGroup {
-        ListenerGroup {
-            listeners: Vec::new()
+    async fn bind_all(socket_addrs: Vec<SocketAddr>) -> ListenerGroup {
+        let mut listeners=  Vec::new();
+        for socket_addr in socket_addrs {
+            let listener = match Listener::bind(socket_addr).await {
+                Ok(l) => l,
+                Err(e) => {
+                    eprintln!("Bruh moment!: {}", e); // TODO: l10n: ERR_NOT_LISTENING
+                    continue;
+                }
+            };
+            listeners.push(listener);
         }
+        ListenerGroup {
+            listeners,
+            over_tls: false,
+        }
+    }
+
+    pub(crate) async fn with_tls_acceptor(mut self, tls_acceptor: TlsAcceptor) -> ListenerGroup {
+        for mut listener in &mut self.listeners {
+            listener.tls_acceptor = Option::from(tls_acceptor.clone());
+        }
+        self.over_tls = true;
+        self
+    }
+
+    pub(crate) fn start(mut self) -> RunningListenerGroup {
+        let cancellation_token = CancellationToken::new();
+        let mut join_set = JoinSet::new();
+        while let Some(l) = self.listeners.pop() {
+            join_set.spawn(l.run(cancellation_token.child_token()));
+        }
+        RunningListenerGroup {
+            over_tls: self.over_tls,
+            cancellation_token,
+            join_set,
+        }
+    }
+
+    pub(crate) async fn run(mut self, cancellation_token: CancellationToken) -> ListenerGroup {
+
+        self
     }
 }
 
 #[cfg(test)]
 mod tests {
+    const TEST_DURATION: Duration = Duration::from_secs(5);
+
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-    use crate::listener::Listener;
+    use std::time::Duration;
+    use tokio::join;
+    use tokio::time::sleep;
+    use tokio_util::sync::CancellationToken;
+    use crate::listener::{Listener, ListenerGroup};
+
+    async fn cancel_after_duration(cancellation_token: CancellationToken, duration: Duration) {
+        sleep(duration).await;
+        cancellation_token.cancel();
+    }
 
     #[tokio::test]
     async fn run_single_listener() {
         let socket
-            = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 255)), 0);
-        let listener = Listener::bind(socket).await;
-
+            = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
+        let listener = Listener::bind(socket).await.unwrap();
+        let cancellation_token = CancellationToken::new();
+        let listener_future = listener.run(
+            cancellation_token.clone());
+        let cancel_future = cancel_after_duration(
+            cancellation_token, TEST_DURATION);
+        let res = join!(cancel_future, listener_future);
     }
 
-    #[test]
-    fn run_multiple_listeners() {
-        let sockets = [
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 255)), 0),
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 255)), 0),
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 255)), 0),
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 255)), 0),
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 255)), 0),
+    #[tokio::test]
+    async fn run_multiple_listeners() {
+        let sockets = vec![
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0),
         ];
-
-
+        let listeners = ListenerGroup::bind_all(sockets).await;
+        let cancellation_token = CancellationToken::new();
+        let listeners_future = listeners.run(
+            cancellation_token.clone());
+        let cancel_future = cancel_after_duration(
+            cancellation_token, TEST_DURATION);
+        let res = join!(cancel_future, listeners_future);
     }
 }
