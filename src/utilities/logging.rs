@@ -19,7 +19,7 @@ impl log::Log for SimpleLogger {
 
 static LOGGER: SimpleLogger = SimpleLogger;
 
-pub fn init(log_level: LevelFilter) -> Result<(), SetLoggerError> {
+pub(crate) fn init(log_level: LevelFilter) -> Result<(), SetLoggerError> {
     log::set_logger(&LOGGER)
         .map(|()| log::set_max_level(log_level))
 }

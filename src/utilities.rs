@@ -1,1 +1,1 @@
-mod logging;
+pub(crate) mod logging;
