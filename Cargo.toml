@@ -1,12 +1,23 @@
 [package]
 name = "striczkof-io"
 version = "0.2.0"
+authors = ["Alvin Peters <alvin@striczkof.io>"]
 edition = "2021"
 rust-version = "1.74.0"
 repository = "https://github.com/striczkof/striczkof-io"
 license = "AGPL-3"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = ["tls"]
+tls = []
+# Web server. Comes with HTTP by default.
+web = []
+## To enable HTTPS.
+https_web = ["web", "tls"]
+# Database stuff.
+database = []
 
 [dependencies]
 tokio = {version = "1.36", features = ["full"]}
@@ -18,16 +29,11 @@ rustls-pemfile = "2.1"
 log = "0.4"
 tokio-util = "0.7"
 hyper-util = {version = "0.1", features = ["full"]}
+# Config stuff
+configparser = {version = "3.0", features = ["tokio"]}
 ## Database stuff
-
 
 
 [dev-dependencies]
 ## Used for generating x509 certificate for testing.
 rcgen = "0.12"
-
-[features]
-default = ["tls"]
-tls = []
-# Database stuff
-database = []

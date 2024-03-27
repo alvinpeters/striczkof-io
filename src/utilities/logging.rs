@@ -1,8 +1,8 @@
 use log::{Record, Level, Metadata, SetLoggerError, LevelFilter};
 
-struct SimpleLogger;
+struct Logger;
 
-impl log::Log for SimpleLogger {
+impl log::Log for Logger {
     fn enabled(&self, metadata: &Metadata) -> bool {
         metadata.level() <= Level::Debug
     }
@@ -13,11 +13,15 @@ impl log::Log for SimpleLogger {
         }
     }
 
-    fn flush(&self) {}
+    /// Means writing the log to the file bro.
+    /// This will write to the file if enabled, and the database.
+    fn flush(&self) {
+
+    }
 }
 
 
-static LOGGER: SimpleLogger = SimpleLogger;
+static LOGGER: Logger = Logger;
 
 pub(crate) fn init(log_level: LevelFilter) -> Result<(), SetLoggerError> {
     log::set_logger(&LOGGER)
