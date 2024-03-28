@@ -9,7 +9,7 @@ rust-version = "1.74.0"
 [dependencies]
 actix-web = { version = "4.4", features = ["rustls-0_21"] }
 actix-files = "0.6"
-rustls = "0.21"
+rustls = "0.23"
 rustls-pemfile = "1.0"
 ed25519-dalek = "2.1.1"
 sailfish = "0.8"
