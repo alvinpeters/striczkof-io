@@ -10,23 +10,26 @@ license = "AGPL-3"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["tls"]
+default = ["tls", "web", "https"]
 tls = []
 # Web server. Comes with HTTP by default.
 web = []
+https = ["web"]
 ## To enable HTTPS.
 https_web = ["web", "tls"]
 # Database stuff.
 database = []
 
 [dependencies]
-tokio = {version = "1.36", features = ["full"]}
-hyper = {version = "1.2", features = ["full"]}
-http-body-util = "0.1"
-rustls = "0.23"
+tokio = {version = "1.37.0", features = ["full"]}
+hyper = {version = "1.2.0", features = ["full"]}
+http-body-util = "0.1.1"
+rustls = "0.23.4"
 tokio-rustls = "0.26"
 rustls-pemfile = "2.1"
+# Logging stuff
 log = "0.4"
+chrono = "0.4.37"
 tokio-util = "0.7"
 hyper-util = {version = "0.1", features = ["full"]}
 # Config stuff

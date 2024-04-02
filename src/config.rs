@@ -24,6 +24,6 @@ pub(crate) struct Config {
 
 impl Config {
     pub(crate) fn new() {
-
+        
     }
 }

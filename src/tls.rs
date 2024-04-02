@@ -65,9 +65,7 @@ mod tests {
         if Path::new(PRIV_KEY_FILE).exists() && Path::new(PUB_CERT_FILE).exists() {
             return;
         }
-        let domain_hosts = vec![
-            "localhost".to_string()
-        ];
+        let domain_hosts = vec!["localhost".to_string()];
         let cert = generate_simple_self_signed(domain_hosts).unwrap();
         // Write the private key and public certificate to their respective files.
         fs::write(PRIV_KEY_FILE, cert.serialize_private_key_pem()).expect(

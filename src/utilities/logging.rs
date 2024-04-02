@@ -1,4 +1,5 @@
 use log::{Record, Level, Metadata, SetLoggerError, LevelFilter};
+use chrono::Local;
 
 struct Logger;
 
@@ -9,7 +10,7 @@ impl log::Log for Logger {
 
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
-            println!("{}: {}", record.level(), record.args());
+            println!("{} - {}: {}", Local::now().to_rfc3339(), record.level(), record.args());
         }
     }
 
