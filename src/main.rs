@@ -1,57 +1,38 @@
-mod config;
-mod webpages;
+#[cfg(feature = "ssr")]
+#[tokio::main]
+async fn main() {
+    use axum::Router;
+    use leptos::*;
+    use leptos_axum::{generate_route_list, LeptosRoutes};
+    use striczkof_io::app::*;
+    use striczkof_io::fileserv::file_and_error_handler;
 
-use std::env;
-use config::Config;
+    // Setting get_configuration(None) means we'll be using cargo-leptos's env values
+    // For deployment these variables are:
+    // <https://github.com/leptos-rs/start-axum#executing-a-server-on-a-remote-machine-without-the-toolchain>
+    // Alternately a file can be specified such as Some("Cargo.toml")
+    // The file would need to be included with the executable when moved to deployment
+    let conf = get_configuration(None).await.unwrap();
+    let leptos_options = conf.leptos_options;
+    let addr = leptos_options.site_addr;
+    let routes = generate_route_list(App);
 
-use actix_web::{App, HttpServer};
+    // build our application with a route
+    let app = Router::new()
+        .leptos_routes(&leptos_options, routes, App)
+        .fallback(file_and_error_handler)
+        .with_state(leptos_options);
 
-#[actix_web::main]
-async fn main() -> std::io::Result<()> {
-    let config = match Config::new().parse_args(env::args().collect()) {
-        Some(c) => match c.finalise() {
-            Ok(c) => c,
-            Err(e) => {
-                println!("Failed to finalise config: {}", e);
-                return Ok(());
-            }
-        },
-        None => return Ok(()) // Just called help or version
-    };
-    let mut web_server = HttpServer::new(|| {
-        App::new()
-            .configure(webpages::config)
-    }).server_hostname(env!("_HOSTNAME"));
-    if !config.http_sockets.is_empty() {
-        for http_socket in config.http_sockets.iter() {
-            web_server = web_server.bind(http_socket)?;
-            println!("Bound to HTTP socket {}", http_socket);
-        }
-    }
-    if !config.https_sockets.is_empty() {
-        match config.tls_config {
-            Some(c) => {
-                println!("TLS is enabled. Binding to HTTPS sockets");
-                let sockets_left = config.https_sockets.len();
-                for https_socket in config.https_sockets.iter() {
-                    web_server = web_server.bind_rustls_0_22(https_socket, c.clone())?;
-                    println!("Bound to HTTPS socket {}", https_socket);
-                }
-            },
-            None => {
-                eprintln!("HTTPS sockets set but TLS is disabled. Not binding to HTTPS sockets.");
-            }
-        }
-    }
-
-    if web_server.addrs().is_empty() {
-        println!("I don't think you can call this a web server if it doesn't bind to any sockets.");
-        Ok(())
-    } else {
-        println!("Server going live!");
-        let result = web_server.run().await;
-        println!("Server stopped");
-        result
-    }
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    logging::log!("listening on http://{}", &addr);
+    axum::serve(listener, app.into_make_service())
+        .await
+        .unwrap();
 }
 
+#[cfg(not(feature = "ssr"))]
+pub fn main() {
+    // no client-side main function
+    // unless we want this to work with e.g., Trunk for a purely client-side app
+    // see lib.rs for hydration function instead
+}

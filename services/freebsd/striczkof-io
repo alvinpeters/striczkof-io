@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# PROVIDE: striczkof_io
+# PROVIDE: striczkof-io
 # REQUIRE: LOGIN
 # KEYWORD: shutdown
 
