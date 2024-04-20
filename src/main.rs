@@ -34,7 +34,7 @@ async fn main() -> std::io::Result<()> {
                 println!("TLS is enabled. Binding to HTTPS sockets");
                 let sockets_left = config.https_sockets.len();
                 for https_socket in config.https_sockets.iter() {
-                    web_server = web_server.bind_rustls_021(https_socket, c.clone())?;
+                    web_server = web_server.bind_rustls_0_22(https_socket, c.clone())?;
                     println!("Bound to HTTPS socket {}", https_socket);
                 }
             },

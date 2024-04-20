@@ -1,9 +1,9 @@
-use std::error::Error;
 use std::fs::File;
 use std::io::{BufReader, Cursor};
 use getopts::Options;
-use rustls::{Certificate, PrivateKey, ServerConfig};
-use rustls_pemfile::{certs, pkcs8_private_keys};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use rustls::ServerConfig;
+use rustls_pemfile::{certs, pkcs8_private_keys, private_key};
 
 pub(crate) struct Config {
     pub(crate) http_sockets: Vec<String>,
@@ -118,7 +118,7 @@ impl Config {
     }
 }
 
-fn get_cert_chain_and_key(cert_path: &str, key_path: &str) -> Result<(Vec<Certificate>, PrivateKey), &'static str> {
+fn get_cert_chain_and_key<'a>(cert_path: &str, key_path: &str) -> Result<(Vec<CertificateDer<'a>>, PrivateKeyDer<'a>), &'static str> {
     if cert_path.is_empty() || key_path.is_empty() {
         return Err("");
     }
@@ -130,75 +130,63 @@ fn get_cert_chain_and_key(cert_path: &str, key_path: &str) -> Result<(Vec<Certif
             Ok(f) => f,
             Err(_) => return Err("Failed to open TLS key file"),
         });
-    let tls_certs: Vec<Certificate> = match certs(cert_buffer) {
-        Ok(certs) => {
-            certs.into_iter()
-                .map(Certificate)
-                .collect()
-        },
-        Err(_) => {
-            return Err("Failed to load provided TLS certificate chain");
+    let tls_certs: Vec<CertificateDer<'a>> = certs(cert_buffer).map(
+        |c| {
+            c.unwrap()
         }
-    };
-    let mut tls_keys: Vec<PrivateKey> = match pkcs8_private_keys(key_buffer) {
-        Ok(keys) => {
-            keys.into_iter()
-                .map(PrivateKey)
-                .collect()
+    ).collect();
+    let mut tls_key= match private_key(key_buffer) {
+        Ok(key) => {
+            match key {
+                None => return Err("Failed to load provided TLS keys"),
+                Some(key) => key
+            }
         },
         Err(_) => {
             return Err("Failed to load provided TLS keys");
         }
     };
-    if tls_keys.is_empty() || tls_certs.is_empty() {
+    if tls_certs.is_empty() {
         return Err("Either provided key or certificate chain is empty");
     };
-    Ok((tls_certs, tls_keys.remove(0)))
+    Ok((tls_certs, tls_key))
 }
 
 /// Gets the TLS key and certificate compiled into the binary.
 /// Gives you compile time error if the files are not found.
 #[cfg(feature = "compiled_tls")]
-fn get_compiled_cert_chain_and_key() -> Result<(Vec<Certificate>, PrivateKey), &'static str> {
+fn get_compiled_cert_chain_and_key<'a>() -> Result<(Vec<CertificateDer<'a>>, PrivateKeyDer<'a>), &'static str> {
     let cert_buffer = &mut BufReader::new(
         Cursor::new(include_bytes!(concat!("../", env!("TLS_CERT")))));
     let key_buffer = &mut BufReader::new(
         Cursor::new(include_bytes!(concat!("../", env!("TLS_KEY")))));
 
-    let tls_certs: Vec<Certificate> = match certs(cert_buffer) {
-        Ok(certs) => {
-            certs.into_iter()
-                .map(Certificate)
-                .collect()
+    let tls_certs: Vec<CertificateDer<'a>> = certs(cert_buffer).map(
+        |c| {
+            c.unwrap()
+        }
+    ).collect();
+    let mut tls_key= match private_key(key_buffer) {
+        Ok(key) => {
+            match key {
+                None => return Err("Failed to load provided TLS keys"),
+                Some(key) => key
+            }
         },
         Err(_) => {
-            return Err("Failed to load compiled TLS certificates.\n\
-                        Perhaps you compiled in the wrong TLS certificate file?");
+            return Err("Failed to load provided TLS keys");
         }
     };
-    let mut tls_keys: Vec<PrivateKey> = match pkcs8_private_keys(key_buffer) {
-        Ok(keys) => {
-            keys.into_iter()
-                .map(PrivateKey)
-                .collect()
-        },
-        Err(_) => {
-            return Err("Failed to load compiled TLS keys,\n\
-                        Perhaps you compiled in the wrong TLS key file?");
-        }
-    };
-    if tls_keys.is_empty() || tls_certs.is_empty() {
+    if tls_certs.is_empty() {
         return Err("Either the compiled keys or the certificate chain is empty.\n\
                     Perhaps you compiled in the wrong TLS files?");
     };
-    Ok((tls_certs, tls_keys.remove(0)))
+    Ok((tls_certs, tls_key))
 }
 
-fn get_tls_config(cert_chain: Vec<Certificate>, key_der: PrivateKey) -> Option<ServerConfig> {
-    let server_config = ServerConfig::builder()
-        .with_safe_defaults()
-        .with_no_client_auth();
-    match server_config.with_single_cert(cert_chain, key_der) {
+fn get_tls_config(cert_chain: Vec<CertificateDer<'static>>, key_der: PrivateKeyDer<'static>) -> Option<ServerConfig> {
+    match ServerConfig::builder()
+        .with_no_client_auth().with_single_cert(cert_chain, key_der) {
         Ok(config) => Some(config),
         Err(_) => {
             eprintln!("Failed to load TLS configuration.");
