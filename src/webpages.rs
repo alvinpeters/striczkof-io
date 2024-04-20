@@ -8,5 +8,6 @@ use actix_files::Files;
 pub(crate) fn config(cfg: &mut ServiceConfig) {
     cfg.default_service(to(page_not_found::page_not_found));
     cfg.service(index::index);
-    cfg.service(Files::new("/assets", std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets")));
+    cfg.service(Files::new("/assets", std::path::Path::new("/var/www/assets")));
+    cfg.service(Files::new("/.well-known", std::path::Path::new("/var/www/wkd")));
 }
