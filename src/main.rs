@@ -15,6 +15,7 @@ use utilities::{logging, signalling};
 #[cfg(feature = "web")]
 use crate::server::web::WebServer;
 use crate::utilities::signalling::{ Signal, Signallable, TargetServer};
+use crate::utilities::error_handling::ExitResult;
 
 
 const PROGRAM_NAME: &str = env!("CARGO_PKG_NAME");
@@ -30,7 +31,7 @@ pub(crate) struct Context {
 }
 
 #[tokio::main]
-async fn main() -> std::io::Result<()> {
+async fn main() -> ExitResult {
     // Print out a sign-of-life line.
     println!("{PROGRAM_NAME} - {PROGRAM_VERSION} : {PROGRAM_AUTHOR}\n");
     // l10n gets initialised here when implemented.
@@ -77,7 +78,7 @@ async fn main() -> std::io::Result<()> {
         }
     }
     // The end.
-    Ok(())
+    ExitResult::Ok
 }
 
 

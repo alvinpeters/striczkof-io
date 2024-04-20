@@ -8,7 +8,7 @@ use hyper::rt::{Read, Write};
 use hyper::service::service_fn;
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto;
-use log::debug;
+use log::{debug, info, warn};
 use tokio::io::{Result, Error, ErrorKind};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::select;
@@ -94,7 +94,7 @@ impl Listener {
             let tls_stream = match tls_acceptor.accept(tcp_stream).await {
                 Ok(tls_stream) => tls_stream,
                 Err(err) => {
-                    eprintln!("failed to perform tls handshake: {err:#}");
+                    warn!("failed to perform tls handshake: {err:#}");
                     return;
                 }
             };
@@ -108,7 +108,7 @@ impl Listener {
             .serve_connection(io, service_fn(index))
             .await
         {
-            eprintln!("Error serving connection: {:?}", err);
+            warn!("Error serving connection: {:?}", err);
         }
     }
 
@@ -144,7 +144,7 @@ impl Listener {
         let join_handle = tokio::task::spawn(async move {
             Self::listen(self.tcp_listener, self.tls_acceptor, token).await
         });
-
+        debug!("Listener running on {}", self.socket);
         // Return an active listener.
         RunningListener {
             socket: self.socket,

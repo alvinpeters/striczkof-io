@@ -1,6 +1,7 @@
 use tokio::sync::mpsc::Sender;
 use super::Server;
 use crate::{listener::ListenerGroup, utilities::signalling::{Signal, Signallable}};
+use crate::listener::RunningListenerGroup;
 
 pub(crate) struct WebServer {
     http_listeners: Option<ListenerGroup>,
@@ -16,11 +17,11 @@ impl WebServer {
     pub(crate) fn new(signal_send: Sender<Signal>) -> WebServer {
         WebServer {
             http_listeners: None,
-            running_http_listeners: todo!(),
+            running_http_listeners: None,
             #[cfg(feature = "https")]
-            https_listeners: todo!(),
+            https_listeners: None,
             #[cfg(feature = "https")]
-            running_https_listeners: todo!(),
+            running_https_listeners: None,
         }
     }
 }
